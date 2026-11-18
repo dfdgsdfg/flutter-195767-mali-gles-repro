@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+  <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+  <application android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="Mali investigation runner" android:requestLegacyExternalStorage="true">
+    <activity android:name=".NoopActivity" android:exported="false" />
+  </application>
+  <instrumentation android:name=".MaliInstrumentation" android:targetPackage="com.example.flutter_mali_repro.runner" android:label="Mali195767 bounded measurement" />
+</manifest>
