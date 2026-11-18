@@ -40,3 +40,20 @@ These are two physical-device runs with the same ARM32 profile APK and runner. E
 | Moto e20 (Android 11) | Mali-G57 r28p0 | Text | 7.318 ms | 3.8685 ms | 1.89× |
 
 The A10 run captured 5,173 frames. Its build p50 ranged from 1.06 to 1.21 ms across the four conditions. These measurements establish the raster gap on the G71 and G57. The G31 in the original issue is a separate device. FrameTiming measures raster duration and requires a separate trace to attribute CPU execution or waits.
+
+## Experimental engine changes
+
+I tested two changes with local ARM32 profile engine builds at `327cc39c4d` on the Moto e20 (Mali-G57 r28p0). Each A/B run alternated engine builds, with three passes per scene and variant. The local engine builds in this table are a separate set from the stock profile APK above.
+
+- **Glyph-key hashing.** In `SubpixelGlyph::AbslHashValue`, pack the common unstroked tone key into one 64-bit value before mixing it. This reduces hashing work on ARM32 and preserves key equality.
+- **Glyph vertex preparation.** In `TextContents::ComputeVertexData`, compute the glyph origin or scaled bounds once before emitting the four vertices. Per-vertex rounding and texture coordinates keep the original calculations. A standalone comparison of the position and UV calculations matched bit for bit across 200,027 cases on ARMv7.
+
+| A/B comparison | Cards raster p50 | Text raster p50 |
+|---|---:|---:|
+| Unmodified local engine → hash change | 8.405 → 7.688 ms (8.53% lower) | 8.528 → 7.612 ms (10.74% lower) |
+| Hash change → hash + vertex changes | 7.718 → 7.598 ms (1.56% lower) | 7.586 → 7.033 ms (7.29% lower) |
+| Hash change → hash + vertex changes, repeat | 7.722 → 7.567 ms (2.01% lower) | 7.564 → 7.031 ms (7.05% lower) |
+
+Each percentage uses its own A/B baseline. Raster p99 moved in both directions across the experiments. The changes were measured on the G57 only.
+
+A substantial raster gap with Skia remained. In a separate instrumented Text run, Impeller's atlas preparation visited about 1,583 glyphs per frame while adding 23 new glyphs across 414 frames. Skia can reuse prepared text data and skip individual glyph checks when the atlas generation is unchanged. Similar reuse may help close more of the gap in Impeller. The engine experiments stopped here, and this repository records the repro and results for future investigation.
