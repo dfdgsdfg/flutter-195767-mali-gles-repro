@@ -4,7 +4,10 @@ import 'dart:ui' as ui;
 import 'dart:developer' as developer;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+
+part 'card_image.dart';
 
 const MethodChannel _controlChannel = MethodChannel('mali_repro/control');
 
@@ -40,6 +43,7 @@ class _HomePageState extends State<HomePage> {
   String _activeTab = 'Cards';
   int _activePass = 1;
   String _activeToken = '';
+  _CardImages? _cardImages;
 
   @override
   void initState() {
@@ -82,6 +86,9 @@ class _HomePageState extends State<HomePage> {
       _activeBackend = args['backend'] as String? ?? 'skia';
       _activeTab = tabName;
       _activePass = (args['pass'] as num?)?.toInt() ?? 1;
+      _cardImages = tabName == 'Cards' && args['reuseCardImages'] == true
+          ? _CardImages()
+          : null;
       _beginUs = null;
       setState(() {
         _tab = tab;
@@ -93,11 +100,13 @@ class _HomePageState extends State<HomePage> {
     }
     if (call.method == 'begin') {
       _timings.clear();
+      _cardImages?.beginMeasurement();
       _beginUs = developer.Timeline.now;
       return <String, Object?>{'state': 'begin', 'begin_us': _beginUs};
     }
     if (call.method == 'end') {
       final int endUs = developer.Timeline.now;
+      _cardImages?.endMeasurement();
       await Future<void>.delayed(const Duration(milliseconds: 600));
       final int beginUs = _beginUs ?? endUs;
       final List<Map<String, int>> result = _timings
@@ -116,6 +125,7 @@ class _HomePageState extends State<HomePage> {
         'begin_us': beginUs,
         'end_us': endUs,
         'frames': result,
+        if (_cardImages != null) 'card_images': _cardImages!.toJson(),
       });
       _timings.clear();
       _beginUs = null;
@@ -131,7 +141,7 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(title: Text(_tab == 0 ? 'Cards' : 'Text')),
       body: KeyedSubtree(
         key: ValueKey<String>('tab-$_tab-generation-$_generation'),
-        child: _tab == 0 ? const CardsTab() : const TextTab(),
+        child: _tab == 0 ? CardsTab._(_cardImages) : const TextTab(),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
@@ -164,14 +174,28 @@ const _thumbIcons = [
 ];
 
 class CardsTab extends StatelessWidget {
-  const CardsTab({super.key});
+  const CardsTab({super.key}) : _images = null;
+  const CardsTab._(this._images);
+
+  final _CardImages? _images;
 
   @override
   Widget build(BuildContext context) {
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: 60,
-      itemBuilder: (context, i) => ItemCard(index: i),
+      itemBuilder: (context, i) {
+        final card = ItemCard(index: i);
+        final images = _images;
+        return images == null
+            ? card
+            : _StaticCardImage(
+                key: ValueKey<int>(i),
+                stats: images,
+                pixelRatio: MediaQuery.devicePixelRatioOf(context),
+                child: card,
+              );
+      },
     );
   }
 }

@@ -28,6 +28,30 @@ Each pass uses a fresh scene mount, two warm-up swipes, another fresh mount, and
 
 Check for `OK (1 test)` in the instrumentation output and use a fresh local output directory for each run. Use `backendOrder gles:skia` on a separate run to check order effects. Short runs with `-e passes 1` require `--passes 1` when running the analyzer.
 
+## Compare drawing cards with reusing their images
+
+Run the baseline command above and pull its results first. With the same installed APKs, repeat the run with `reuseCardImages` enabled. The runner resets each scene and performs the same warm-up and measured swipes.
+
+```sh
+adb shell am instrument -w -e passes 3 -e backendOrder skia:gles -e reuseCardImages true \
+  com.example.flutter_mali_repro.runner/.MaliInstrumentation
+adb pull /sdcard/Download/mali195767 ./card-image-results
+python3 tools/analyze_frames.py card-image-results/runner-manifest.json \
+  --runtime-log impeller_gles=card-image-results/gles-runtime.log \
+  --runtime-log skia=card-image-results/skia-runtime.log
+```
+
+In this mode the app captures each static card, including its shadow, at device pixel ratio and draws the image at the current scroll position. It releases the image when the card detaches. Both renderers use the option on the Cards tab. The Text tab provides a live-rendered control. Cards records include the number of captures during the measured scroll, fallbacks and an estimate of peak retained RGBA image bytes.
+
+In the original experiment on a Moto e20 (Mali-G57 r28p0, Android 11, ARM32 profile), both modes used the same experimental engine with prepared glyph geometry. Across 36 trials, Cards raster p50 was:
+
+| Rendering path | Impeller GLES | Skia |
+| --- | ---: | ---: |
+| Draw card contents | 6.956 ms | 3.627 ms |
+| Reuse card images with medium filtering | 3.922 ms | 3.469 ms |
+
+Image reuse lowered the Impeller median by 43.6%. The gap was 0.295 ms against live Skia and about 0.45 ms when both renderers reused images. The peak retained image pixel estimate was 9.75 MiB. Medium filtering softened some text edges at fractional scroll positions. These figures apply to this static-card scene on the G57. The stock SDK build above lets you measure the same comparison on your own engine and device. [Original experiment report](https://github.com/flutter/flutter/issues/195767#issuecomment-7208107195)
+
 ## Measured raster p50
 
 These are two physical-device runs with the same ARM32 profile APK and runner. Each run covered both scenes, both renderers, and three passes per combination. The runs used the Skia → Impeller GLES order.

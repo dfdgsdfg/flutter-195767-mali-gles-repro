@@ -21,6 +21,7 @@ public final class MaliInstrumentation extends Instrumentation {
   private final JSONArray collected=new JSONArray();
   private String backend,tab,label;
   private int pass;
+  private boolean reuseCardImages;
 
   @Override public void onCreate(Bundle args) {
     super.onCreate(args);arguments=args==null?new Bundle():args;start();
@@ -35,6 +36,7 @@ public final class MaliInstrumentation extends Instrumentation {
       check(output!=null,"external output unavailable");output.mkdirs();
       write("environment.txt",shell("id")+shell("getprop ro.build.fingerprint")+shell("getprop ro.product.cpu.abilist")+shell("wm size")+shell("wm density")+shell("pm list features"));
       for(int i=0;i<3;i++){old[i]=shell("settings get global "+settings[i]).trim();shell("settings put global "+settings[i]+" 1");}
+      reuseCardImages = Boolean.parseBoolean(arguments.getString("reuseCardImages", "false"));
       int passes=Integer.parseInt(arguments.getString("passes","1"));check(passes>=1&&passes<=3,"passes out of range");
       String[] order=arguments.getString("backendOrder","gles:skia").split(":");
       for(String selected:order) {
@@ -63,6 +65,10 @@ public final class MaliInstrumentation extends Instrumentation {
             JSONObject root=new JSONObject(shell("run-as "+TARGET+" cat "+APPDIR+"/results.json"));JSONArray runs=root.getJSONArray("runs");JSONObject run=runs.getJSONObject(runs.length()-1);
             check(label.equals(run.getString("label")),"stale result: "+label);check(run.getJSONArray("frames").length()>=30,"too few frames "+label);
             check((backend.equals("gles")?"impeller_gles":"skia").equals(run.getString("backend")),"result backend identity mismatch");check(tab.equals(run.getString("tab"))&&pass==run.getInt("pass"),"result identity mismatch");
+            if (reuseCardImages && tab.equals("Cards")) {
+              JSONObject images = run.getJSONObject("card_images");
+              check(images.getInt("measured_captures") > 0, "no card images captured during scroll");
+            }
             collected.put(run);write("runner-manifest.json",new JSONObject().put("runs",collected).toString());
             write(label+"-thermal.txt",shell("dumpsys thermalservice")+shell("dumpsys battery"));
             Log.i("MaliReproRunner","PASS "+label+" frames="+run.getJSONArray("frames").length());
@@ -83,7 +89,7 @@ public final class MaliInstrumentation extends Instrumentation {
     }
   }
   private void command(String command)throws Exception {
-    String id="t"+(++token);shell("am start -W --activity-single-top -n "+ACTIVITY+" --es mali_command "+command+" --es mali_token "+id+" --es mali_label "+label+" --es mali_tab "+tab+" --es mali_backend "+(backend.equals("gles")?"impeller_gles":"skia")+" --ei mali_pass "+pass);
+    String id="t"+(++token);shell("am start -W --activity-single-top -n "+ACTIVITY+" --es mali_command "+command+" --es mali_token "+id+" --es mali_label "+label+" --es mali_tab "+tab+" --es mali_backend "+(backend.equals("gles")?"impeller_gles":"skia")+" --ei mali_pass "+pass+" --ez reuse_card_images "+reuseCardImages);
     JSONObject ack=waitJson(APPDIR+"/command-ack.json",id,20000);check(!ack.has("error"),"command failed "+ack);
   }
   private JSONObject waitJson(String path,String expected,int timeout)throws Exception {

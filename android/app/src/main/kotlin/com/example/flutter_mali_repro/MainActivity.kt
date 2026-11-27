@@ -65,6 +65,7 @@ class MainActivity : FlutterActivity() {
     val label = intent.getStringExtra("mali_label") ?: "unknown"
     val args = mapOf<String, Any?>(
       "label" to label,
+      "reuseCardImages" to intent.getBooleanExtra("reuse_card_images", false),
       "tab" to (intent.getStringExtra("mali_tab") ?: if (label.contains("Text")) "Text" else "Cards"),
       "backend" to (intent.getStringExtra("mali_backend") ?: if (intent.getBooleanExtra("enable-impeller", false)) "impeller_gles" else "skia"),
       "pass" to intent.getIntExtra("mali_pass", 1),
@@ -130,6 +131,7 @@ class MainActivity : FlutterActivity() {
     run.put("begin_us", (arguments["begin_us"] as? Number)?.toLong() ?: 0L)
     run.put("end_us", (arguments["end_us"] as? Number)?.toLong() ?: 0L)
     run.put("wall_us", System.nanoTime() / 1000L)
+    (arguments["card_images"] as? Map<*, *>)?.let { run.put("card_images", JSONObject(it)) }
     run.put("frames", frames)
     run.put("auxiliary_egl_gles", cachedDriverInfo ?: auxiliaryDriverInfo().also { cachedDriverInfo = it })
     val file = File(filesDir, "results.json")
